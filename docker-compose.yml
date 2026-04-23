@@ -1,0 +1,104 @@
+# ATS Analyzer — Docker Compose
+# Phase 1: FastAPI + PostgreSQL
+# Phase 2: Telegram Bot + Redis + Job Alert Scheduler
+# Auth:   Passwordless OTP + 2FA + Mailpit (dev email)
+
+services:
+  # ── Phase 1 ─────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: database
+      POSTGRES_DB: ats_db
+    ports: ['5432:5432']
+    volumes: ['pg_data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:database@postgres:5432/ats_db
+      - ADZUNA_APP_ID=${ADZUNA_APP_ID}
+      - ADZUNA_API_KEY=${ADZUNA_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-mistral:latest}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-change-me}
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - SMTP_FROM=noreply@ats-analyzer.local
+      - REDIS_URL=redis://redis:6379/0
+    ports: ['8000:8000']
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Phase 2 ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports: ['6379:6379']
+    volumes: ['redis_data:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── Auth — Dev Email Testing ────────────────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '1025:1025'   # SMTP
+      - '8025:8025'   # Web UI — view sent emails at http://localhost:8025
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: telegram_bot/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis: { condition: service_healthy }
+      backend: { condition: service_healthy }
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - API_BASE_URL=http://backend:8000
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://postgres:database@postgres:5432/ats_db
+    command: python -m telegram_bot.bot
+
+  job-scheduler:
+    build:
+      context: .
+      dockerfile: telegram_bot/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis: { condition: service_healthy }
+      backend: { condition: service_healthy }
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - API_BASE_URL=http://backend:8000
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://postgres:database@postgres:5432/ats_db
+      - ALERT_HOUR=${ALERT_HOUR:-9}
+    command: python -m telegram_bot.scheduler
+
+volumes:
+  pg_data:
+  redis_data:
