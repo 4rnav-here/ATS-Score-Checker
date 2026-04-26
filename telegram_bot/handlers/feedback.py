@@ -119,24 +119,48 @@ PRIORITY_EMOJI = {
     "low": "⚪",
 }
 
+SECTION_EMOJI = {
+    "Skills": "📌",
+    "Experience": "📋",
+    "Projects": "📋",
+    "New Projects Section": "📋",
+}
+
 
 def _format_recommendations(recs: list[dict]) -> str:
-    """Format recommendation list for Telegram."""
+    """Format recommendation list for Telegram — includes suggested fix content."""
     if not recs:
         return "✅ No recommendations — your resume looks great!"
 
     lines = ["*🤖 AI Recommendations*\n"]
 
-    for i, rec in enumerate(recs[:8], 1):  # Limit to 8 to avoid message size limits
+    for i, rec in enumerate(recs[:8], 1):
         emoji = PRIORITY_EMOJI.get(rec.get("priority", "low"), "⚪")
         title = rec.get("title", "")
         desc = rec.get("description", "")
         impact = rec.get("impact", "")
+        suggestions = rec.get("suggested_content", [])
 
         lines.append(f"{emoji} *{i}. {title}*")
-        lines.append(f"  {desc[:200]}")
+        lines.append(f"  {desc[:180]}")
         if impact:
             lines.append(f"  _Impact: {impact}_")
+
+        # Render suggested fix blocks
+        if suggestions:
+            lines.append("")
+            lines.append("  *Suggested Fix:*")
+            for s in suggestions[:2]:  # max 2 per rec to stay under message limit
+                section = s.get("section", "")
+                content = s.get("content", "")
+                ctype = s.get("content_type", "bullet")
+                sec_emoji = SECTION_EMOJI.get(section, "📄")
+                lines.append(f"  {sec_emoji} _{section} Section_")
+                if ctype == "bullet":
+                    lines.append(f"  `• {content[:200]}`")
+                else:
+                    lines.append(f"  `{content[:200]}`")
+
         lines.append("")
 
     return "\n".join(lines)

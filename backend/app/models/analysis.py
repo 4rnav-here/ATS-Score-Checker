@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 from sqlalchemy import Column, Text, DateTime, JSON, Boolean, BigInteger, Integer, UniqueConstraint
@@ -76,12 +76,21 @@ class SectionScores(BaseModel):
     summary: Optional[float] = None
 
 
+class SuggestedContent(BaseModel):
+    """A single ready-to-paste content suggestion for one resume section."""
+    section: str        # "Skills", "Experience", "Projects", "New Projects Section"
+    label: str          # e.g. "Add to Skills section"
+    content: str        # The exact text to paste
+    content_type: Literal["bullet", "skill_keyword", "summary_sentence"] = "bullet"
+
+
 class Recommendation(BaseModel):
     priority: str       # "critical" | "high" | "medium" | "low"
     category: str       # e.g. "keyword_alignment", "semantic_alignment", etc.
     title: str          # short headline
     description: str    # actionable detail
     impact: str         # estimated score improvement description
+    suggested_content: list[SuggestedContent] = []  # ready-to-paste fix
 
 
 class RecommendationSummary(BaseModel):
@@ -118,5 +127,6 @@ class AnalysisResponse(BaseModel):
     recommendation_summary: Optional[RecommendationSummary] = None
 
     experience: Optional[ExperienceInfo] = None
+    resume_text: Optional[str] = None  # included for job-search agent context
 
 

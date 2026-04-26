@@ -14,6 +14,7 @@ from app.models.analysis import (
     RecommendationSummary,
     ScoreBreakdown,
     SectionScores,
+    SuggestedContent,
 )
 from app.services import (
     embedding_service,
@@ -149,9 +150,20 @@ async def analyze_resume(
         quality_issues=quality_issues,
         sections_found=sections_found,
         sections_missing=sections_missing,
+        resume_sections=sections,   # pass parsed sections for content generation
     )
     rec_summary = recommendation_service.summarize_recommendations(raw_recs)
-    recommendations = [Recommendation(**r) for r in raw_recs]
+    recommendations = [
+        Recommendation(
+            priority=r["priority"],
+            category=r["category"],
+            title=r["title"],
+            description=r["description"],
+            impact=r["impact"],
+            suggested_content=[SuggestedContent(**sc) for sc in r.get("suggested_content", [])],
+        )
+        for r in raw_recs
+    ]
 
     logger.info(
         f"Recommendations generated: {rec_summary['total']} total "
@@ -196,4 +208,5 @@ async def analyze_resume(
         recommendations=recommendations,
         recommendation_summary=RecommendationSummary(**rec_summary),
         experience=ExperienceInfo(**experience_data),
+        resume_text=resume_text,
     )

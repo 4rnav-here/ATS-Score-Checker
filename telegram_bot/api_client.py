@@ -42,9 +42,19 @@ async def analyze_resume(pdf_bytes: bytes, jd_text: str) -> dict:
     return response.json()
 
 
-async def get_job_matches(analysis_id: str, force_refresh: bool = False) -> list[dict]:
-    """POST /api/jobs/search — cached in Redis for 4 hours."""
-    cache_key = f"jobs:{analysis_id}"
+async def get_job_matches(
+    analysis_id: str,
+    force_refresh: bool = False,
+    city_filter: list[str] | None = None,
+) -> list[dict]:
+    """POST /api/jobs/search — cached in Redis for 4 hours.
+
+    Args:
+        city_filter: Optional list of Indian cities (e.g. ["Bangalore"]).
+                     Cache key includes city so different filters are cached separately.
+    """
+    city_key = "_".join(sorted(city_filter)) if city_filter else "all"
+    cache_key = f"jobs:{analysis_id}:{city_key}"
 
     if not force_refresh:
         cached = await cache_get(cache_key)
@@ -52,10 +62,11 @@ async def get_job_matches(analysis_id: str, force_refresh: bool = False) -> list
             return json.loads(cached)
 
     client = await get_client()
-    response = await client.post(
-        "/api/jobs/search",
-        json={"analysis_id": analysis_id},
-    )
+    payload: dict = {"analysis_id": analysis_id, "max_days_old": 30}
+    if city_filter:
+        payload["cities"] = city_filter
+
+    response = await client.post("/api/jobs/search", json=payload)
     response.raise_for_status()
     jobs = response.json().get("jobs", [])
 

@@ -1,7 +1,9 @@
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-load_dotenv()
+# find_dotenv() walks UP from this file's location until it finds .env,
+# so it works regardless of which directory uvicorn is launched from.
+load_dotenv(find_dotenv(usecwd=False), override=True)
 
 # ── Sentence-BERT model ──────────────────────────────────────────────────────
 MODEL_NAME: str = os.getenv("MODEL_NAME", "all-MiniLM-L6-v2")
@@ -34,8 +36,11 @@ FORMAT_PENALTY_MAX: float = 15.0
 ADZUNA_APP_ID: str = os.getenv("ADZUNA_APP_ID", "")
 ADZUNA_API_KEY: str = os.getenv("ADZUNA_API_KEY", "")
 
+# ── RapidAPI (JSearch — LinkedIn/Indeed India aggregator) ────────────────────
+RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "")
+
 # ── Job search settings ──────────────────────────────────────────────────────
-MAX_JOB_RESULTS: int = int(os.getenv("MAX_JOB_RESULTS", "50"))
+MAX_JOB_RESULTS: int = int(os.getenv("MAX_JOB_RESULTS", "15"))
 
 # ── JWT / Auth ───────────────────────────────────────────────────────────────
 JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "CHANGE-ME-in-production-use-openssl-rand-hex-32")

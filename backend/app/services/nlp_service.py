@@ -240,3 +240,62 @@ def extract_keywords(text: str) -> set:
             raw.add(token.lemma_)
 
     return normalize_skills(raw)
+
+
+def extract_experience_context(sections: dict, skill: str) -> dict:
+    """
+    For a given missing skill, search the experience and projects sections
+    for adjacent context (tool names, project hints, action verbs).
+
+    Used by content_generator_service to produce grounded resume bullets
+    that don't contradict what the user has already written.
+
+    Args:
+        sections: Dict from parse_sections() — {section_name: {"content": str, ...}}
+        skill: The canonical skill name (already normalized via skills_taxonomy)
+
+    Returns:
+        {
+            "related_tools": list[str],   — other tech names mentioned nearby
+            "project_hints": list[str],   — project/product names found
+            "verbs_used": list[str],      — strong action verbs in experience
+            "has_experience_section": bool,
+            "has_projects_section": bool,
+        }
+    """
+    experience_text = sections.get("experience", {}).get("content", "")
+    projects_text = sections.get("projects", {}).get("content", "")
+    combined = f"{experience_text}\n{projects_text}".lower()
+
+    # Extract action verbs (past tense is common in resumes)
+    doc = nlp(combined[:3000])  # limit for speed
+    verbs_used: list[str] = []
+    for token in doc:
+        if (
+            token.pos_ == "VERB"
+            and token.tag_ in {"VBD", "VBN"}  # past tense / past participle
+            and token.lemma_ not in SOFT_SKILL_BLOCKLIST
+            and len(token.lemma_) >= 4
+        ):
+            verbs_used.append(token.lemma_)
+
+    # Extract proper nouns / tech names as project hints and related tools
+    related_tools: list[str] = []
+    project_hints: list[str] = []
+    for token in doc:
+        if token.pos_ == "PROPN" and len(token.text) >= 3:
+            text_cap = token.text.capitalize()
+            if text_cap not in project_hints:
+                project_hints.append(text_cap)
+        elif token.pos_ == "NOUN" and token.text in SKILL_ALIASES:
+            canonical = SKILL_ALIASES[token.text]
+            if canonical not in related_tools:
+                related_tools.append(canonical)
+
+    return {
+        "related_tools": related_tools[:5],
+        "project_hints": project_hints[:3],
+        "verbs_used": list(set(verbs_used))[:6],
+        "has_experience_section": bool(experience_text),
+        "has_projects_section": bool(projects_text),
+    }
